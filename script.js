@@ -1837,11 +1837,14 @@ function startGame() {
 
 function nextPhase() {
 
+    // Avança para a próxima fase
     currentPhase++;
 
+
+    // Se não houver mais fases,
+    // vai para a tela de vitória.
     if (
-        currentPhase >=
-        phases.length
+        currentPhase >= phases.length
     ) {
 
         victory();
@@ -1850,19 +1853,39 @@ function nextPhase() {
     }
 
 
-    energy =
-        clamp(
-            energy + 20,
-            0,
-            100
-        );
+    // Recupera um pouco de energia
+    // entre as fases.
+    energy = clamp(
+        energy + 20,
+        0,
+        100
+    );
 
 
+    // Reseta a quantidade de alimentos
+    // coletados na nova fase.
+    collectedFoods = 0;
+
+
+    // Cria todos os elementos
+    // da nova fase.
     createPhase();
 
-    showScreen(
-        "game-screen"
-    );
+
+    // Define novamente o estado
+    // como jogo ativo.
+    gameState = "PLAYING";
+
+
+    // Mostra a tela do jogo.
+    showScreen("game-screen");
+
+
+    // IMPORTANTE:
+    // O gameLoop havia sido encerrado
+    // quando entramos na tela educativa.
+    // Aqui nós iniciamos novamente.
+    requestAnimationFrame(gameLoop);
 }
 
 
