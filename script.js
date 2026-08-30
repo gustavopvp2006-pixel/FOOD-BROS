@@ -1,4 +1,3 @@
-```javascript
 /* ============================================================
    NUTRI - AVENTURA NUTRITIVA
    JOGO EDUCATIVO 2D
@@ -2521,5 +2520,4 @@ document.addEventListener(
 showScreen(
     "menu-screen"
 );
-```
 
