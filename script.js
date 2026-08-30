@@ -1,6 +1,7 @@
 /* ============================================================
    NUTRI - AVENTURA NUTRITIVA
    JOGO EDUCATIVO 2D
+   VERSÃO AVANÇADA
 
    Tecnologia:
    - HTML5 Canvas
@@ -8,6 +9,22 @@
    - CSS
 
    Projeto acadêmico de Nutrição
+
+   PRINCIPAIS RECURSOS:
+   - 4 fases
+   - Sprite personalizado do personagem
+   - Animações
+   - Inimigos desenhados em Canvas
+   - Chef final
+   - Sistema de energia
+   - Sistema de vidas
+   - Pontuação
+   - Alimentos
+   - Telas educativas
+   - Controles de teclado
+   - Controles Touch para celular
+   - Câmera lateral
+   - Física de plataforma
 ============================================================ */
 
 
@@ -22,7 +39,7 @@ ctx.imageSmoothingEnabled = false;
 
 
 /* ============================================================
-   CONFIGURAÇÃO
+   CONFIGURAÇÃO DO JOGO
 ============================================================ */
 
 const GAME_WIDTH = 1280;
@@ -30,6 +47,110 @@ const GAME_HEIGHT = 720;
 
 let scaleX = 1;
 let scaleY = 1;
+
+
+/* ============================================================
+   CONFIGURAÇÃO DO SPRITE
+============================================================ */
+
+/*
+    Seu sprite possui frames baseados em 32x64.
+
+    A imagem deve estar em:
+
+    assets/nutri_player_sprites_32x64.png
+
+    O personagem será ampliado no Canvas,
+    preservando o estilo pixel art.
+*/
+
+const SPRITE_FRAME_WIDTH = 32;
+const SPRITE_FRAME_HEIGHT = 64;
+
+const SPRITE_SCALE = 3;
+
+
+/*
+    Linhas aproximadas da sprite sheet enviada.
+
+    Cada animação possui quantidade diferente
+    de frames.
+*/
+
+const PLAYER_ANIMATIONS = {
+
+    idle: {
+        row: 0,
+        frames: 4,
+        speed: 12
+    },
+
+    walk: {
+        row: 1,
+        frames: 6,
+        speed: 7
+    },
+
+    side: {
+        row: 2,
+        frames: 6,
+        speed: 7
+    },
+
+    jump: {
+        row: 3,
+        frames: 4,
+        speed: 10
+    },
+
+    attack: {
+        row: 4,
+        frames: 4,
+        speed: 5
+    }
+};
+
+
+/*
+    Offset vertical da sprite sheet.
+
+    A imagem enviada possui o título na parte superior.
+    Esses valores posicionam as linhas dos sprites.
+*/
+
+const SPRITE_ROWS_Y = [
+    42,
+    112,
+    185,
+    258,
+    258
+];
+
+
+/* ============================================================
+   CARREGAR SPRITE
+============================================================ */
+
+const playerSprite = new Image();
+
+playerSprite.src =
+    "assets/nutri_player_sprites_32x64.png";
+
+let playerSpriteLoaded = false;
+
+playerSprite.onload = () => {
+
+    playerSpriteLoaded = true;
+
+};
+
+playerSprite.onerror = () => {
+
+    console.warn(
+        "Não foi possível carregar o sprite do personagem."
+    );
+
+};
 
 
 /* ============================================================
@@ -41,11 +162,20 @@ function resizeCanvas() {
     canvas.width = GAME_WIDTH;
     canvas.height = GAME_HEIGHT;
 
-    scaleX = window.innerWidth / GAME_WIDTH;
-    scaleY = window.innerHeight / GAME_HEIGHT;
+    scaleX =
+        window.innerWidth /
+        GAME_WIDTH;
+
+    scaleY =
+        window.innerHeight /
+        GAME_HEIGHT;
 }
 
-window.addEventListener("resize", resizeCanvas);
+
+window.addEventListener(
+    "resize",
+    resizeCanvas
+);
 
 resizeCanvas();
 
@@ -71,48 +201,92 @@ let cameraX = 0;
 let gameWon = false;
 
 
+/*
+    Controle de segurança do Game Loop.
+
+    Isso evita que o jogo crie vários
+    requestAnimationFrame simultaneamente.
+*/
+
+let gameLoopRunning = false;
+
+let animationFrameId = null;
+
+
+/*
+    Evita executar a conclusão de uma fase
+    várias vezes.
+*/
+
+let phaseEnding = false;
+
+
 /* ============================================================
    TECLAS
 ============================================================ */
 
 const keys = {};
 
-window.addEventListener("keydown", event => {
 
-    keys[event.code] = true;
+window.addEventListener(
+    "keydown",
+    event => {
 
-    if (
-        [
-            "ArrowUp",
-            "ArrowDown",
-            "ArrowLeft",
-            "ArrowRight",
-            "Space"
-        ].includes(event.code)
-    ) {
-        event.preventDefault();
+        keys[event.code] = true;
+
+
+        if (
+            [
+                "ArrowUp",
+                "ArrowDown",
+                "ArrowLeft",
+                "ArrowRight",
+                "Space"
+            ].includes(event.code)
+        ) {
+
+            event.preventDefault();
+        }
+
+
+        /*
+            Z = ataque
+        */
+
+        if (
+            event.code === "KeyZ" &&
+            gameState === "PLAYING"
+        ) {
+
+            if (player) {
+
+                player.attack();
+            }
+        }
+
     }
+);
 
-    if (
-        event.code === "KeyZ" &&
-        gameState === "PLAYING"
-    ) {
-        player.attack();
+
+window.addEventListener(
+    "keyup",
+    event => {
+
+        keys[event.code] = false;
+
     }
-});
-
-
-window.addEventListener("keyup", event => {
-
-    keys[event.code] = false;
-});
+);
 
 
 /* ============================================================
    UTILITÁRIOS
 ============================================================ */
 
-function clamp(value, min, max) {
+function clamp(
+    value,
+    min,
+    max
+) {
 
     return Math.max(
         min,
@@ -121,19 +295,34 @@ function clamp(value, min, max) {
 }
 
 
-function random(min, max) {
+function random(
+    min,
+    max
+) {
 
-    return Math.random() * (max - min) + min;
+    return Math.random() *
+        (max - min) +
+        min;
 }
 
 
-function rectsCollide(a, b) {
+function rectsCollide(
+    a,
+    b
+) {
 
     return (
-        a.x < b.x + b.width &&
-        a.x + a.width > b.x &&
-        a.y < b.y + b.height &&
-        a.y + a.height > b.y
+        a.x <
+        b.x + b.width &&
+
+        a.x + a.width >
+        b.x &&
+
+        a.y <
+        b.y + b.height &&
+
+        a.y + a.height >
+        b.y
     );
 }
 
@@ -145,15 +334,20 @@ function rectsCollide(a, b) {
 const phases = [
 
     {
-        name: "Fase 1 - Café da manhã",
+        name:
+            "Fase 1 - Café da manhã",
 
-        theme: "morning",
+        theme:
+            "morning",
 
-        width: 5500,
+        width:
+            5500,
 
-        educationIcon: "🍎",
+        educationIcon:
+            "🍎",
 
-        educationTitle: "Café da manhã completo!",
+        educationTitle:
+            "Café da manhã completo!",
 
         educationText:
             "Começar o dia com uma alimentação variada pode contribuir para uma rotina alimentar mais adequada. Frutas, cereais e outras opções podem fazer parte de diferentes combinações.",
@@ -171,16 +365,22 @@ const phases = [
         ]
     },
 
+
     {
-        name: "Fase 2 - Rotina corrida",
+        name:
+            "Fase 2 - Rotina corrida",
 
-        theme: "city",
+        theme:
+            "city",
 
-        width: 6500,
+        width:
+            6500,
 
-        educationIcon: "⏰",
+        educationIcon:
+            "⏰",
 
-        educationTitle: "Você venceu a rotina corrida!",
+        educationTitle:
+            "Você venceu a rotina corrida!",
 
         educationText:
             "Planejamento pode ajudar nas escolhas alimentares quando o dia está cheio. Ter opções variadas disponíveis facilita encontrar alternativas adequadas para diferentes momentos.",
@@ -201,16 +401,22 @@ const phases = [
         ]
     },
 
+
     {
-        name: "Fase 3 - Hora do lanche",
+        name:
+            "Fase 3 - Hora do lanche",
 
-        theme: "park",
+        theme:
+            "park",
 
-        width: 6000,
+        width:
+            6000,
 
-        educationIcon: "🥦",
+        educationIcon:
+            "🥦",
 
-        educationTitle: "Lanche concluído!",
+        educationTitle:
+            "Lanche concluído!",
 
         educationText:
             "Não existe uma única combinação perfeita para todas as pessoas. Variedade, equilíbrio e contexto são importantes para construir uma alimentação adequada.",
@@ -231,16 +437,22 @@ const phases = [
         ]
     },
 
+
     {
-        name: "Fase 4 - Desafio final",
+        name:
+            "Fase 4 - Desafio final",
 
-        theme: "night",
+        theme:
+            "night",
 
-        width: 7000,
+        width:
+            7000,
 
-        educationIcon: "🏆",
+        educationIcon:
+            "🏆",
 
-        educationTitle: "Você enfrentou o Chef da Rotina Corrida!",
+        educationTitle:
+            "Você enfrentou o Chef da Rotina Corrida!",
 
         educationText:
             "Manter uma alimentação adequada durante uma rotina agitada pode exigir planejamento. O objetivo não é buscar perfeição, mas construir um conjunto equilibrado de escolhas ao longo do tempo.",
@@ -262,6 +474,7 @@ const phases = [
             "chef"
         ]
     }
+
 ];
 
 
@@ -382,6 +595,7 @@ const foodData = {
         energy: -6,
         points: 20
     }
+
 };
 
 
@@ -393,16 +607,37 @@ class Player {
 
     constructor() {
 
+        /*
+            Posição
+        */
+
         this.x = 150;
-        this.y = 400;
+
+        this.y = 500;
+
+
+        /*
+            Hitbox física.
+
+            Mantemos a hitbox menor que o sprite
+            para deixar a movimentação natural.
+        */
 
         this.width = 46;
-        this.height = 70;
+
+        this.height = 68;
+
+
+        /*
+            Física
+        */
 
         this.velocityX = 0;
+
         this.velocityY = 0;
 
-        this.speed = 0.8;
+        this.speed = 0.85;
+
         this.maxSpeed = 7;
 
         this.jumpForce = -15;
@@ -411,7 +646,17 @@ class Player {
 
         this.grounded = false;
 
+
+        /*
+            Direção
+        */
+
         this.facing = 1;
+
+
+        /*
+            Estados
+        */
 
         this.crouching = false;
 
@@ -419,11 +664,28 @@ class Player {
 
         this.attackTimer = 0;
 
+
+        /*
+            Invencibilidade
+        */
+
         this.invincible = false;
 
         this.invincibleTimer = 0;
 
+
+        /*
+            Animação
+        */
+
         this.animationTimer = 0;
+
+        this.currentAnimation = "idle";
+
+        this.animationFrame = 0;
+
+        this.animationCounter = 0;
+
     }
 
 
@@ -431,44 +693,108 @@ class Player {
 
         this.handleInput();
 
-        this.velocityY += this.gravity;
 
-        this.velocityY = Math.min(
-            this.velocityY,
-            18
-        );
+        /*
+            Gravidade
+        */
 
-        this.x += this.velocityX;
+        this.velocityY +=
+            this.gravity;
 
-        this.y += this.velocityY;
 
-        this.velocityX *= 0.82;
+        this.velocityY =
+            Math.min(
+                this.velocityY,
+                18
+            );
+
+
+        /*
+            Movimento horizontal
+        */
+
+        this.x +=
+            this.velocityX;
+
+
+        /*
+            Movimento vertical
+        */
+
+        this.y +=
+            this.velocityY;
+
+
+        /*
+            Atrito
+        */
+
+        this.velocityX *=
+            0.82;
+
+
+        /*
+            Plataformas
+        */
 
         this.checkPlatforms();
 
+
+        /*
+            Limites
+        */
+
         this.handleWorldBounds();
 
-        if (this.attackTimer > 0) {
+
+        /*
+            Ataque
+        */
+
+        if (
+            this.attackTimer > 0
+        ) {
 
             this.attackTimer--;
 
         } else {
 
-            this.attacking = false;
+            this.attacking =
+                false;
         }
 
-        if (this.invincibleTimer > 0) {
+
+        /*
+            Invencibilidade
+        */
+
+        if (
+            this.invincibleTimer > 0
+        ) {
 
             this.invincibleTimer--;
 
         } else {
 
-            this.invincible = false;
+            this.invincible =
+                false;
         }
 
+
+        /*
+            Animação
+        */
+
+        this.updateAnimation();
+
         this.animationTimer++;
+
     }
 
+
+    /* ========================================================
+       INPUT
+    ======================================================== */
 
     handleInput() {
 
@@ -476,13 +802,16 @@ class Player {
             keys["ArrowLeft"] ||
             keys["KeyA"];
 
+
         const right =
             keys["ArrowRight"] ||
             keys["KeyD"];
 
+
         const down =
             keys["ArrowDown"] ||
             keys["KeyS"];
+
 
         const jump =
             keys["ArrowUp"] ||
@@ -491,59 +820,128 @@ class Player {
             keys["Space"];
 
 
+        /*
+            Esquerda
+        */
+
         if (left) {
 
-            this.velocityX -= this.speed;
+            this.velocityX -=
+                this.speed;
 
             this.facing = -1;
         }
 
 
+        /*
+            Direita
+        */
+
         if (right) {
 
-            this.velocityX += this.speed;
+            this.velocityX +=
+                this.speed;
 
             this.facing = 1;
         }
 
 
-        this.velocityX = clamp(
-            this.velocityX,
-            -this.maxSpeed,
-            this.maxSpeed
-        );
+        /*
+            Limita velocidade
+        */
+
+        this.velocityX =
+            clamp(
+                this.velocityX,
+                -this.maxSpeed,
+                this.maxSpeed
+            );
 
 
-        this.crouching = down && this.grounded;
+        /*
+            Agachar
+        */
 
+        this.crouching =
+            down &&
+            this.grounded;
+
+
+        /*
+            Pulo
+
+            Para evitar pulo infinito,
+            usamos uma trava.
+        */
 
         if (
             jump &&
-            this.grounded
+            this.grounded &&
+            !this.jumpLock
         ) {
 
             this.jump();
+
+            this.jumpLock = true;
+
         }
+
+
+        if (!jump) {
+
+            this.jumpLock = false;
+        }
+
     }
 
+
+    /* ========================================================
+       PULO
+    ======================================================== */
 
     jump() {
 
-        this.velocityY = this.jumpForce;
+        this.velocityY =
+            this.jumpForce;
 
-        this.grounded = false;
+        this.grounded =
+            false;
     }
 
+
+    /* ========================================================
+       ATAQUE
+    ======================================================== */
 
     attack() {
 
-        if (this.attacking) return;
+        if (
+            this.attacking ||
+            gameState !== "PLAYING"
+        ) {
+
+            return;
+        }
+
 
         this.attacking = true;
 
-        this.attackTimer = 18;
+        this.attackTimer = 22;
+
+
+        /*
+            Pequeno impulso para dar
+            sensação de impacto.
+        */
+
+        this.velocityX +=
+            this.facing * 0.8;
     }
 
+
+    /* ========================================================
+       HITBOX DO ATAQUE
+    ======================================================== */
 
     getAttackBox() {
 
@@ -551,60 +949,113 @@ class Player {
 
             x:
                 this.facing === 1
-                    ? this.x + this.width
-                    : this.x - 55,
 
-            y: this.y + 15,
+                    ? this.x +
+                      this.width -
+                      4
 
-            width: 55,
+                    : this.x -
+                      60,
 
-            height: 35
+            y:
+                this.y + 16,
+
+            width:
+                60,
+
+            height:
+                38
         };
     }
 
+
+    /* ========================================================
+       PLATAFORMAS
+    ======================================================== */
 
     checkPlatforms() {
 
         this.grounded = false;
 
-        for (const platform of platforms) {
+
+        for (
+            const platform of platforms
+        ) {
 
             if (
+
                 this.velocityY >= 0 &&
-                this.x + this.width > platform.x &&
-                this.x < platform.x + platform.width &&
-                this.y + this.height >= platform.y &&
-                this.y + this.height <=
-                    platform.y + platform.height + this.velocityY + 5
+
+                this.x +
+                    this.width >
+                    platform.x &&
+
+                this.x <
+                    platform.x +
+                    platform.width &&
+
+                this.y +
+                    this.height >=
+                    platform.y &&
+
+                this.y +
+                    this.height <=
+                    platform.y +
+                    platform.height +
+                    this.velocityY +
+                    5
+
             ) {
 
                 this.y =
                     platform.y -
                     this.height;
 
-                this.velocityY = 0;
+                this.velocityY =
+                    0;
 
-                this.grounded = true;
+                this.grounded =
+                    true;
+
             }
+
         }
+
     }
 
 
+    /* ========================================================
+       LIMITES DO MUNDO
+    ======================================================== */
+
     handleWorldBounds() {
 
-        if (this.x < 0) {
+        /*
+            Parede esquerda
+        */
+
+        if (
+            this.x < 0
+        ) {
 
             this.x = 0;
 
             this.velocityX = 0;
         }
 
+
+        /*
+            Parede direita
+        */
+
         const worldWidth =
             phases[currentPhase].width;
 
+
         if (
-            this.x + this.width >
-            worldWidth
+            this.x +
+                this.width >
+                worldWidth
         ) {
 
             this.x =
@@ -613,6 +1064,10 @@ class Player {
         }
 
 
+        /*
+            Caiu do mapa
+        */
+
         if (
             this.y >
             GAME_HEIGHT + 200
@@ -620,205 +1075,515 @@ class Player {
 
             loseLife();
         }
+
     }
 
 
-    takeDamage(amount = 1) {
+    /* ========================================================
+       DANO
+    ======================================================== */
 
-        if (this.invincible) return;
+    takeDamage(
+        amount = 1
+    ) {
+
+        if (
+            this.invincible ||
+            gameState !== "PLAYING"
+        ) {
+
+            return;
+        }
+
 
         lives -= amount;
 
         energy -= 15;
 
-        this.invincible = true;
 
-        this.invincibleTimer = 90;
+        this.invincible =
+            true;
 
-        this.velocityY = -8;
+        this.invincibleTimer =
+            90;
+
+
+        this.velocityY =
+            -8;
+
+
+        this.velocityX =
+            -this.facing * 5;
+
 
         updateHUD();
 
-        if (lives <= 0 || energy <= 0) {
+
+        if (
+            lives <= 0 ||
+            energy <= 0
+        ) {
 
             gameOver();
         }
+
     }
 
 
+    /* ========================================================
+       ANIMAÇÃO
+    ======================================================== */
+
+    updateAnimation() {
+
+        let animation =
+            "idle";
+
+
+        if (
+            this.attacking
+        ) {
+
+            animation =
+                "attack";
+
+        } else if (
+            !this.grounded
+        ) {
+
+            animation =
+                "jump";
+
+        } else if (
+            Math.abs(
+                this.velocityX
+            ) > 0.4
+        ) {
+
+            animation =
+                "walk";
+
+        } else {
+
+            animation =
+                "idle";
+        }
+
+
+        if (
+            animation !==
+            this.currentAnimation
+        ) {
+
+            this.currentAnimation =
+                animation;
+
+            this.animationFrame =
+                0;
+
+            this.animationCounter =
+                0;
+        }
+
+
+        const data =
+            PLAYER_ANIMATIONS[
+                this.currentAnimation
+            ];
+
+
+        this.animationCounter++;
+
+
+        if (
+            this.animationCounter >=
+            data.speed
+        ) {
+
+            this.animationCounter =
+                0;
+
+            this.animationFrame++;
+
+
+            if (
+                this.animationFrame >=
+                data.frames
+            ) {
+
+                this.animationFrame =
+                    0;
+            }
+        }
+
+    }
+
+
+    /* ========================================================
+       DESENHAR SPRITE
+    ======================================================== */
+
     draw() {
+
+        /*
+            Piscar quando recebe dano
+        */
 
         if (
             this.invincible &&
-            Math.floor(this.invincibleTimer / 6) % 2 === 0
+            Math.floor(
+                this.invincibleTimer / 6
+            ) % 2 === 0
         ) {
+
             return;
         }
 
 
-        const drawX = this.x - cameraX;
-
-        const drawY = this.y;
-
-
-        /* Corpo */
-
-        ctx.fillStyle = "#f2b48b";
-
-        ctx.fillRect(
-            drawX + 12,
-            drawY + 15,
-            22,
-            27
-        );
+        const drawX =
+            this.x -
+            cameraX;
 
 
-        /* Cabeça */
+        /*
+            Sprite visual
+        */
 
-        ctx.fillStyle = "#f5c39e";
-
-        ctx.fillRect(
-            drawX + 8,
-            drawY,
-            30,
-            25
-        );
+        const drawWidth =
+            SPRITE_FRAME_WIDTH *
+            SPRITE_SCALE;
 
 
-        /* Cabelo */
-
-        ctx.fillStyle = "#3a2419";
-
-        ctx.fillRect(
-            drawX + 8,
-            drawY,
-            30,
-            7
-        );
+        const drawHeight =
+            SPRITE_FRAME_HEIGHT *
+            SPRITE_SCALE;
 
 
-        /* Camisa */
+        /*
+            Centralizamos o sprite
+            sobre a hitbox.
+        */
 
-        ctx.fillStyle = "#2f9d65";
-
-        ctx.fillRect(
-            drawX + 10,
-            drawY + 23,
-            26,
-            25
-        );
-
-
-        /* Calça */
-
-        ctx.fillStyle = "#28507a";
-
-        ctx.fillRect(
-            drawX + 11,
-            drawY + 47,
-            24,
-            18
-        );
-
-
-        /* Pernas */
-
-        ctx.fillStyle = "#20242a";
-
-        ctx.fillRect(
-            drawX + 8,
-            drawY + 62,
-            13,
-            8
-        );
-
-        ctx.fillRect(
-            drawX + 27,
-            drawY + 62,
-            13,
-            8
-        );
-
-
-        /* Olhos */
-
-        ctx.fillStyle = "#111";
-
-        ctx.fillRect(
+        const visualX =
             drawX +
-                (this.facing === 1 ? 28 : 12),
-            drawY + 10,
+            this.width / 2 -
+            drawWidth / 2;
+
+
+        const visualY =
+            this.y +
+            this.height -
+            drawHeight;
+
+
+        /*
+            Se a imagem carregou,
+            desenhamos o sprite.
+        */
+
+        if (
+            playerSpriteLoaded
+        ) {
+
+            const animation =
+                PLAYER_ANIMATIONS[
+                    this.currentAnimation
+                ];
+
+
+            const frameX =
+                this.animationFrame *
+                SPRITE_FRAME_WIDTH;
+
+
+            const frameY =
+                SPRITE_ROWS_Y[
+                    animation.row
+                ];
+
+
+            ctx.save();
+
+
+            /*
+                Espelhamento
+            */
+
+            if (
+                this.facing === -1
+            ) {
+
+                ctx.translate(
+                    visualX +
+                    drawWidth,
+                    visualY
+                );
+
+                ctx.scale(
+                    -1,
+                    1
+                );
+
+                ctx.drawImage(
+
+                    playerSprite,
+
+                    frameX,
+                    frameY,
+
+                    SPRITE_FRAME_WIDTH,
+                    SPRITE_FRAME_HEIGHT,
+
+                    0,
+                    0,
+
+                    drawWidth,
+                    drawHeight
+                );
+
+            } else {
+
+                ctx.drawImage(
+
+                    playerSprite,
+
+                    frameX,
+                    frameY,
+
+                    SPRITE_FRAME_WIDTH,
+                    SPRITE_FRAME_HEIGHT,
+
+                    visualX,
+                    visualY,
+
+                    drawWidth,
+                    drawHeight
+                );
+
+            }
+
+
+            ctx.restore();
+
+
+        } else {
+
+            /*
+                Fallback caso o PNG não carregue.
+            */
+
+            this.drawFallback();
+        }
+
+
+        /*
+            Efeito de ataque
+        */
+
+        if (
+            this.attacking
+        ) {
+
+            this.drawAttackEffect();
+        }
+
+    }
+
+
+    /* ========================================================
+       FALLBACK
+    ======================================================== */
+
+    drawFallback() {
+
+        const x =
+            this.x -
+            cameraX;
+
+
+        const y =
+            this.y;
+
+
+        /*
+            Corpo
+        */
+
+        ctx.fillStyle =
+            "#2f9d65";
+
+        ctx.fillRect(
+            x + 8,
+            y + 22,
+            30,
+            32
+        );
+
+
+        /*
+            Cabeça
+        */
+
+        ctx.fillStyle =
+            "#f2b48b";
+
+        ctx.fillRect(
+            x + 8,
+            y,
+            30,
+            25
+        );
+
+
+        /*
+            Cabelo
+        */
+
+        ctx.fillStyle =
+            "#241710";
+
+        ctx.fillRect(
+            x + 6,
+            y - 2,
+            34,
+            10
+        );
+
+
+        /*
+            Calça
+        */
+
+        ctx.fillStyle =
+            "#284e78";
+
+        ctx.fillRect(
+            x + 9,
+            y + 52,
+            28,
+            16
+        );
+
+
+        /*
+            Pernas
+        */
+
+        ctx.fillStyle =
+            "#20242a";
+
+        ctx.fillRect(
+            x + 7,
+            y + 65,
+            12,
+            6
+        );
+
+        ctx.fillRect(
+            x + 27,
+            y + 65,
+            12,
+            6
+        );
+
+    }
+
+
+    /* ========================================================
+       EFEITO DE ATAQUE
+    ======================================================== */
+
+    drawAttackEffect() {
+
+        const attack =
+            this.getAttackBox();
+
+
+        const centerX =
+            attack.x -
+            cameraX +
+            (
+                this.facing === 1
+                    ? 10
+                    : attack.width - 10
+            );
+
+
+        const centerY =
+            attack.y +
+            18;
+
+
+        ctx.save();
+
+
+        ctx.strokeStyle =
+            "#ffe680";
+
+        ctx.lineWidth =
+            5;
+
+
+        ctx.beginPath();
+
+
+        if (
+            this.facing === 1
+        ) {
+
+            ctx.arc(
+                centerX,
+                centerY,
+                28,
+                -1.0,
+                0.9
+            );
+
+        } else {
+
+            ctx.arc(
+                centerX,
+                centerY,
+                28,
+                2.2,
+                4.1
+            );
+
+        }
+
+
+        ctx.stroke();
+
+
+        /*
+            Pequenas partículas
+        */
+
+        ctx.fillStyle =
+            "#ffffff";
+
+
+        ctx.fillRect(
+            centerX +
+                this.facing * 30,
+            centerY - 15,
+            6,
+            6
+        );
+
+
+        ctx.fillRect(
+            centerX +
+                this.facing * 38,
+            centerY + 5,
             4,
             4
         );
 
 
-        /* Braço */
-
-        ctx.fillStyle = "#f2b48b";
-
-        if (this.attacking) {
-
-            ctx.fillRect(
-                drawX +
-                    (this.facing === 1 ? 31 : -20),
-                drawY + 25,
-                30,
-                9
-            );
-
-        } else {
-
-            ctx.fillRect(
-                drawX +
-                    (this.facing === 1 ? 32 : 2),
-                drawY + 28,
-                10,
-                22
-            );
-        }
-
-
-        /* Agachado */
-
-        if (this.crouching) {
-
-            ctx.fillStyle = "#28507a";
-
-            ctx.fillRect(
-                drawX + 7,
-                drawY + 48,
-                34,
-                15
-            );
-        }
-
-
-        /* Efeito do ataque */
-
-        if (this.attacking) {
-
-            const attack =
-                this.getAttackBox();
-
-            ctx.strokeStyle = "#ffe680";
-
-            ctx.lineWidth = 5;
-
-            ctx.beginPath();
-
-            ctx.arc(
-                attack.x - cameraX +
-                    (this.facing === 1 ? 0 : attack.width),
-                attack.y + 18,
-                24,
-                -0.8,
-                0.8
-            );
-
-            ctx.stroke();
-        }
+        ctx.restore();
     }
+
 }
 
 
@@ -828,17 +1593,38 @@ class Player {
 
 class Enemy {
 
-    constructor(x, type) {
+    constructor(
+        x,
+        type
+    ) {
 
         this.x = x;
 
         this.type = type;
 
-        this.width = 55;
 
-        this.height = 55;
+        /*
+            Chef possui tamanho maior
+        */
+
+        if (
+            type === "chef"
+        ) {
+
+            this.width = 100;
+
+            this.height = 105;
+
+        } else {
+
+            this.width = 58;
+
+            this.height = 58;
+        }
+
 
         this.y = 0;
+
 
         this.velocityX = 0;
 
@@ -846,42 +1632,91 @@ class Enemy {
 
         this.gravity = 0.7;
 
-        this.speed = 1.2;
 
-        this.hp = 2;
+        this.speed =
+            type === "chef"
+                ? 1.8
+                : 1.2;
+
+
+        this.hp =
+            type === "chef"
+                ? 12
+                : 2;
+
+
+        this.maxHp =
+            this.hp;
+
 
         this.dead = false;
 
         this.hitTimer = 0;
 
+        this.attackCooldown = 0;
+
+
         this.name =
             this.getName();
 
+
         this.info =
             this.getInfo();
+
+
+        /*
+            Pequena animação
+        */
+
+        this.animTimer =
+            random(
+                0,
+                Math.PI * 2
+            );
+
     }
 
+
+    /* ========================================================
+       NOME
+    ======================================================== */
 
     getName() {
 
         const names = {
 
-            tempo: "Falta de tempo",
+            tempo:
+                "Falta de tempo",
 
-            ultra: "Excesso de ultraprocessados",
+            ultra:
+                "Excesso de ultraprocessados",
 
-            sedentarismo: "Sedentarismo",
+            sedentarismo:
+                "Sedentarismo",
 
-            pular: "Pular refeições",
+            pular:
+                "Pular refeições",
 
-            planning: "Falta de planejamento",
+            planning:
+                "Falta de planejamento",
 
-            chef: "Chef da Rotina Corrida"
+            chef:
+                "Chef da Rotina Corrida"
+
         };
 
-        return names[this.type] || "Desafio";
+
+        return (
+            names[this.type] ||
+            "Desafio"
+        );
+
     }
 
+
+    /* ========================================================
+       INFORMAÇÃO EDUCATIVA
+    ======================================================== */
 
     getInfo() {
 
@@ -891,7 +1726,7 @@ class Enemy {
                 "Planejamento pode ajudar a organizar as refeições mesmo em dias corridos.",
 
             ultra:
-                "A alimentação pode incluir diferentes alimentos. O ponto principal é observar variedade, equilíbrio e frequência.",
+                "Os alimentos ultraprocessados não precisam ser tratados como proibidos. O mais importante é considerar frequência, variedade e equilíbrio.",
 
             sedentarismo:
                 "Movimentar o corpo regularmente faz parte de um estilo de vida saudável.",
@@ -904,58 +1739,107 @@ class Enemy {
 
             chef:
                 "Uma rotina corrida não precisa impedir escolhas equilibradas. Organização e flexibilidade podem ajudar."
+
         };
 
-        return infos[this.type] || "";
+
+        return (
+            infos[this.type] ||
+            ""
+        );
+
     }
 
 
+    /* ========================================================
+       UPDATE
+    ======================================================== */
+
     update() {
 
+        if (
+            this.dead
+        ) {
+
+            return;
+        }
+
+
         const distance =
-            player.x - this.x;
+            player.x -
+            this.x;
 
 
-        if (Math.abs(distance) < 600) {
+        /*
+            IA simples.
+
+            O inimigo só persegue
+            quando o jogador está próximo.
+        */
+
+        if (
+            Math.abs(distance) <
+            700
+        ) {
 
             this.velocityX =
                 Math.sign(distance) *
                 this.speed;
+
+        } else {
+
+            this.velocityX *=
+                0.92;
         }
 
 
-        this.x += this.velocityX;
+        /*
+            Movimento
+        */
 
-        this.velocityY += this.gravity;
+        this.x +=
+            this.velocityX;
 
-        this.y += this.velocityY;
+
+        /*
+            Gravidade
+        */
+
+        this.velocityY +=
+            this.gravity;
 
 
-        for (const platform of platforms) {
+        this.y +=
+            this.velocityY;
 
-            if (
-                this.velocityY >= 0 &&
-                this.x + this.width >
-                    platform.x &&
-                this.x <
-                    platform.x +
-                    platform.width &&
-                this.y + this.height >=
-                    platform.y &&
-                this.y + this.height <=
-                    platform.y +
-                    platform.height +
-                    this.velocityY + 5
-            ) {
 
-                this.y =
-                    platform.y -
-                    this.height;
+        /*
+            Plataformas
+        */
 
-                this.velocityY = 0;
-            }
-        }
+        this.checkPlatforms();
 
+
+        /*
+            Limites
+        */
+
+        const worldWidth =
+            phases[currentPhase].width;
+
+
+        this.x =
+            clamp(
+                this.x,
+                0,
+                worldWidth -
+                    this.width
+            );
+
+
+        /*
+            Colisão com jogador
+        */
 
         if (
             rectsCollide(
@@ -964,125 +1848,1080 @@ class Enemy {
             )
         ) {
 
-            if (player.attacking) {
+            if (
+                player.attacking
+            ) {
 
-                this.takeDamage();
+                /*
+                    O dano será aplicado
+                    pela caixa de ataque.
+                */
 
             } else {
 
                 player.takeDamage();
+
             }
+
         }
 
 
-        if (this.hitTimer > 0) {
+        /*
+            Colisão com ataque
+        */
+
+        if (
+            player.attacking &&
+            rectsCollide(
+                player.getAttackBox(),
+                this
+            )
+        ) {
+
+            this.takeDamage();
+
+        }
+
+
+        /*
+            Cooldown
+        */
+
+        if (
+            this.hitTimer > 0
+        ) {
 
             this.hitTimer--;
         }
+
+
+        if (
+            this.attackCooldown > 0
+        ) {
+
+            this.attackCooldown--;
+        }
+
+
+        this.animTimer +=
+            0.05;
+
     }
 
 
+    /* ========================================================
+       PLATAFORMAS
+    ======================================================== */
+
+    checkPlatforms() {
+
+        for (
+            const platform of platforms
+        ) {
+
+            if (
+
+                this.velocityY >= 0 &&
+
+                this.x +
+                    this.width >
+                    platform.x &&
+
+                this.x <
+                    platform.x +
+                    platform.width &&
+
+                this.y +
+                    this.height >=
+                    platform.y &&
+
+                this.y +
+                    this.height <=
+                    platform.y +
+                    platform.height +
+                    this.velocityY +
+                    5
+
+            ) {
+
+                this.y =
+                    platform.y -
+                    this.height;
+
+                this.velocityY =
+                    0;
+
+            }
+
+        }
+
+    }
+
+
+    /* ========================================================
+       DANO
+    ======================================================== */
+
     takeDamage() {
 
-        if (this.hitTimer > 0) return;
+        if (
+            this.hitTimer > 0 ||
+            this.dead
+        ) {
+
+            return;
+        }
+
 
         this.hp--;
 
-        this.hitTimer = 20;
+
+        this.hitTimer =
+            25;
+
 
         this.velocityX =
             -player.facing * 7;
 
-        this.velocityY = -7;
 
-        if (this.hp <= 0) {
+        this.velocityY =
+            -7;
 
-            this.dead = true;
 
-            score += 250;
+        showFloatingText(
+            this.x,
+            this.y,
+            "-1 ❤️"
+        );
+
+
+        if (
+            this.hp <= 0
+        ) {
+
+            this.dead =
+                true;
+
+
+            score +=
+                this.type === "chef"
+                    ? 1500
+                    : 250;
+
 
             showFloatingText(
+
                 this.x,
+
                 this.y,
-                "+250 ⭐"
+
+                this.type === "chef"
+                    ? "+1500 ⭐"
+                    : "+250 ⭐"
+
             );
 
-            setTimeout(() => {
 
-                showEnemyInfo(
-                    this.name,
-                    this.info
-                );
+            /*
+                Informação educativa
+            */
 
-            }, 200);
+            setTimeout(
+                () => {
+
+                    if (
+                        gameState ===
+                        "PLAYING"
+                    ) {
+
+                        showEnemyInfo(
+                            this.name,
+                            this.info
+                        );
+                    }
+
+                },
+                250
+            );
+
         }
+
     }
 
 
+    /* ========================================================
+       DRAW
+    ======================================================== */
+
     draw() {
 
+        if (
+            this.dead
+        ) {
+
+            return;
+        }
+
+
         const x =
-            this.x - cameraX;
+            this.x -
+            cameraX;
+
 
         const y =
             this.y;
 
 
-        let emoji = "👾";
+        /*
+            Pisca quando leva dano
+        */
 
+        if (
+            this.hitTimer > 0 &&
+            Math.floor(
+                this.hitTimer / 4
+            ) % 2 === 0
+        ) {
 
-        if (this.type === "tempo") {
-            emoji = "⏰";
-        }
-
-        if (this.type === "ultra") {
-            emoji = "🍔";
-        }
-
-        if (this.type === "sedentarismo") {
-            emoji = "🛋️";
-        }
-
-        if (this.type === "pular") {
-            emoji = "😴";
-        }
-
-        if (this.type === "planning") {
-            emoji = "📋";
-        }
-
-        if (this.type === "chef") {
-            emoji = "👨‍🍳";
+            return;
         }
 
 
-        ctx.font = "48px Arial";
+        if (
+            this.type === "chef"
+        ) {
 
-        ctx.textAlign = "center";
+            this.drawChef(
+                x,
+                y
+            );
 
-        ctx.fillText(
-            emoji,
-            x + this.width / 2,
-            y + 45
-        );
+        } else {
 
-
-        if (this.type === "chef") {
-
-            ctx.fillStyle = "#ffffff";
-
-            ctx.font = "bold 14px Arial";
-
-            ctx.fillText(
-                "CHEF",
-                x + this.width / 2,
-                y - 10
+            this.drawAngryEnemy(
+                x,
+                y
             );
         }
 
 
-        ctx.textAlign = "left";
+        /*
+            Barra de vida
+        */
+
+        this.drawHealthBar(
+            x,
+            y
+        );
+
     }
+
+
+    /* ========================================================
+       INIMIGOS BRAVOS
+    ======================================================== */
+
+    drawAngryEnemy(
+        x,
+        y
+    ) {
+
+        const centerX =
+            x +
+            this.width / 2;
+
+
+        const bob =
+            Math.sin(
+                this.animTimer
+            ) * 2;
+
+
+        /*
+            Corpo base
+        */
+
+        let bodyColor =
+            "#d84b3f";
+
+
+        if (
+            this.type === "tempo"
+        ) {
+
+            bodyColor =
+                "#5d6f91";
+
+        } else if (
+            this.type ===
+            "sedentarismo"
+        ) {
+
+            bodyColor =
+                "#8b5fa8";
+
+        } else if (
+            this.type ===
+            "pular"
+        ) {
+
+            bodyColor =
+                "#6b6b6b";
+
+        } else if (
+            this.type ===
+            "planning"
+        ) {
+
+            bodyColor =
+                "#d28b38";
+
+        } else if (
+            this.type ===
+            "ultra"
+        ) {
+
+            bodyColor =
+                "#b94a35";
+        }
+
+
+        /*
+            Corpo
+        */
+
+        ctx.fillStyle =
+            bodyColor;
+
+
+        ctx.beginPath();
+
+
+        ctx.roundRect(
+            x + 3,
+            y + 10 + bob,
+            this.width - 6,
+            this.height - 12,
+            12
+        );
+
+
+        ctx.fill();
+
+
+        /*
+            Borda
+        */
+
+        ctx.strokeStyle =
+            "#351c1c";
+
+        ctx.lineWidth =
+            4;
+
+
+        ctx.stroke();
+
+
+        /*
+            Olhos bravos
+        */
+
+        ctx.fillStyle =
+            "#ffffff";
+
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            centerX - 12,
+            y + 27 + bob,
+            9,
+            7,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            centerX + 12,
+            y + 27 + bob,
+            9,
+            7,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        /*
+            Pupilas
+        */
+
+        ctx.fillStyle =
+            "#111111";
+
+
+        ctx.fillRect(
+            centerX - 14,
+            y + 25 + bob,
+            6,
+            8
+        );
+
+
+        ctx.fillRect(
+            centerX + 8,
+            y + 25 + bob,
+            6,
+            8
+        );
+
+
+        /*
+            Sobrancelhas inclinadas
+        */
+
+        ctx.strokeStyle =
+            "#241515";
+
+        ctx.lineWidth =
+            5;
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            centerX - 21,
+            y + 18 + bob
+        );
+
+        ctx.lineTo(
+            centerX - 5,
+            y + 23 + bob
+        );
+
+        ctx.stroke();
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            centerX + 5,
+            y + 23 + bob
+        );
+
+        ctx.lineTo(
+            centerX + 21,
+            y + 18 + bob
+        );
+
+        ctx.stroke();
+
+
+        /*
+            Boca brava
+        */
+
+        ctx.fillStyle =
+            "#241414";
+
+
+        ctx.beginPath();
+
+        ctx.roundRect(
+            centerX - 14,
+            y + 38 + bob,
+            28,
+            10,
+            5
+        );
+
+        ctx.fill();
+
+
+        /*
+            Dentes
+        */
+
+        ctx.fillStyle =
+            "#ffffff";
+
+
+        ctx.fillRect(
+            centerX - 9,
+            y + 39 + bob,
+            6,
+            5
+        );
+
+
+        ctx.fillRect(
+            centerX - 1,
+            y + 39 + bob,
+            6,
+            5
+        );
+
+
+        ctx.fillRect(
+            centerX + 7,
+            y + 39 + bob,
+            6,
+            5
+        );
+
+
+        /*
+            Braços
+        */
+
+        ctx.strokeStyle =
+            bodyColor;
+
+        ctx.lineWidth =
+            10;
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x + 7,
+            y + 32
+        );
+
+        ctx.lineTo(
+            x - 7,
+            y + 47
+        );
+
+        ctx.stroke();
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x + this.width - 7,
+            y + 32
+        );
+
+        ctx.lineTo(
+            x + this.width + 7,
+            y + 47
+        );
+
+        ctx.stroke();
+
+
+        /*
+            Punhos
+        */
+
+        ctx.fillStyle =
+            "#2b1a1a";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x - 8,
+            y + 49,
+            7,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x + this.width + 8,
+            y + 49,
+            7,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        /*
+            Identificação do inimigo
+        */
+
+        ctx.fillStyle =
+            "#ffffff";
+
+        ctx.font =
+            "bold 11px Arial";
+
+        ctx.textAlign =
+            "center";
+
+
+        const labels = {
+
+            tempo: "TEMPO",
+
+            ultra: "ULTRA",
+
+            sedentarismo: "SEDENT.",
+
+            pular: "REFEIÇÃO",
+
+            planning: "PLANO"
+
+        };
+
+
+        ctx.fillText(
+            labels[this.type] ||
+            "DESAFIO",
+
+            centerX,
+            y - 10
+        );
+
+
+        ctx.textAlign =
+            "left";
+    }
+
+
+    /* ========================================================
+       CHEF FINAL
+    ======================================================== */
+
+    drawChef(
+        x,
+        y
+    ) {
+
+        const centerX =
+            x +
+            this.width / 2;
+
+
+        /*
+            Aura
+        */
+
+        ctx.fillStyle =
+            "rgba(255, 80, 50, 0.15)";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            centerX,
+            y + 50,
+            70,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        /*
+            Corpo
+        */
+
+        ctx.fillStyle =
+            "#9e2930";
+
+
+        ctx.beginPath();
+
+        ctx.roundRect(
+            x + 15,
+            y + 38,
+            70,
+            62,
+            12
+        );
+
+        ctx.fill();
+
+
+        ctx.strokeStyle =
+            "#351515";
+
+        ctx.lineWidth =
+            5;
+
+        ctx.stroke();
+
+
+        /*
+            Cabeça
+        */
+
+        ctx.fillStyle =
+            "#d99a76";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            centerX,
+            y + 33,
+            30,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        ctx.strokeStyle =
+            "#351515";
+
+        ctx.stroke();
+
+
+        /*
+            Chapéu de chef
+        */
+
+        ctx.fillStyle =
+            "#ffffff";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            centerX - 20,
+            y + 8,
+            18,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            centerX,
+            y + 4,
+            21,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            centerX + 20,
+            y + 8,
+            18,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        ctx.fillRect(
+            centerX - 35,
+            y + 12,
+            70,
+            14
+        );
+
+
+        /*
+            Sobrancelhas
+        */
+
+        ctx.strokeStyle =
+            "#291515";
+
+        ctx.lineWidth =
+            6;
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            centerX - 24,
+            y + 27
+        );
+
+        ctx.lineTo(
+            centerX - 5,
+            y + 33
+        );
+
+        ctx.stroke();
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            centerX + 5,
+            y + 33
+        );
+
+        ctx.lineTo(
+            centerX + 24,
+            y + 27
+        );
+
+        ctx.stroke();
+
+
+        /*
+            Olhos
+        */
+
+        ctx.fillStyle =
+            "#111111";
+
+
+        ctx.fillRect(
+            centerX - 19,
+            y + 34,
+            8,
+            8
+        );
+
+
+        ctx.fillRect(
+            centerX + 11,
+            y + 34,
+            8,
+            8
+        );
+
+
+        /*
+            Bigode
+        */
+
+        ctx.fillStyle =
+            "#301b16";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            centerX - 8,
+            y + 52,
+            12,
+            0,
+            Math.PI
+        );
+
+        ctx.fill();
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            centerX + 8,
+            y + 52,
+            12,
+            0,
+            Math.PI
+        );
+
+        ctx.fill();
+
+
+        /*
+            Braços
+        */
+
+        ctx.strokeStyle =
+            "#9e2930";
+
+        ctx.lineWidth =
+            16;
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x + 20,
+            y + 55
+        );
+
+        ctx.lineTo(
+            x - 5,
+            y + 80
+        );
+
+        ctx.stroke();
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x + 80,
+            y + 55
+        );
+
+        ctx.lineTo(
+            x + 105,
+            y + 80
+        );
+
+        ctx.stroke();
+
+
+        /*
+            Mão esquerda
+        */
+
+        ctx.fillStyle =
+            "#d99a76";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x - 7,
+            y + 82,
+            10,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        /*
+            Mão direita
+        */
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x + 107,
+            y + 82,
+            10,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        /*
+            Texto
+        */
+
+        ctx.fillStyle =
+            "#ffe680";
+
+        ctx.font =
+            "bold 18px Arial";
+
+        ctx.textAlign =
+            "center";
+
+
+        ctx.fillText(
+            "CHEF",
+            centerX,
+            y - 25
+        );
+
+
+        ctx.textAlign =
+            "left";
+    }
+
+
+    /* ========================================================
+       BARRA DE VIDA
+    ======================================================== */
+
+    drawHealthBar(
+        x,
+        y
+    ) {
+
+        const width =
+            this.type === "chef"
+                ? 110
+                : 55;
+
+
+        const height = 7;
+
+
+        const barX =
+            x +
+            this.width / 2 -
+            width / 2;
+
+
+        const barY =
+            y -
+            2;
+
+
+        /*
+            Fundo
+        */
+
+        ctx.fillStyle =
+            "#291616";
+
+
+        ctx.fillRect(
+            barX,
+            barY,
+            width,
+            height
+        );
+
+
+        /*
+            Vida
+        */
+
+        const hpPercent =
+            clamp(
+                this.hp /
+                this.maxHp,
+                0,
+                1
+            );
+
+
+        ctx.fillStyle =
+            this.type === "chef"
+                ? "#ff4747"
+                : "#65d66f";
+
+
+        ctx.fillRect(
+            barX,
+            barY,
+            width *
+                hpPercent,
+            height
+        );
+
+    }
+
 }
 
 
@@ -1092,7 +2931,11 @@ class Enemy {
 
 class Food {
 
-    constructor(x, y, type) {
+    constructor(
+        x,
+        y,
+        type
+    ) {
 
         this.x = x;
 
@@ -1107,18 +2950,31 @@ class Food {
         this.data =
             foodData[type];
 
-        this.collected = false;
+        this.collected =
+            false;
 
-        this.animation = random(
-            0,
-            Math.PI * 2
-        );
+        this.animation =
+            random(
+                0,
+                Math.PI * 2
+            );
+
     }
 
 
     update() {
 
-        this.animation += 0.05;
+        if (
+            this.collected
+        ) {
+
+            return;
+        }
+
+
+        this.animation +=
+            0.05;
+
 
         if (
             rectsCollide(
@@ -1129,69 +2985,148 @@ class Food {
 
             this.collect();
         }
+
     }
 
 
     collect() {
 
-        if (this.collected) return;
+        if (
+            this.collected
+        ) {
 
-        this.collected = true;
+            return;
+        }
 
-        energy = clamp(
-            energy + this.data.energy,
-            0,
-            100
-        );
 
-        score += this.data.points;
+        this.collected =
+            true;
+
+
+        energy =
+            clamp(
+                energy +
+                this.data.energy,
+                0,
+                100
+            );
+
+
+        score +=
+            this.data.points;
+
 
         collectedFoods++;
 
+
         showFloatingText(
+
             this.x,
+
             this.y,
+
             this.data.healthy
+
                 ? `+${this.data.energy} ⚡`
+
                 : `${this.data.energy} ⚡`
+
         );
+
 
         updateHUD();
 
 
-        if (energy <= 0) {
+        if (
+            energy <= 0
+        ) {
 
             gameOver();
         }
+
     }
 
 
     draw() {
 
-        if (this.collected) return;
+        if (
+            this.collected
+        ) {
+
+            return;
+        }
 
 
         const x =
-            this.x - cameraX;
+            this.x -
+            cameraX;
+
 
         const y =
             this.y +
-            Math.sin(this.animation) * 5;
+            Math.sin(
+                this.animation
+            ) * 5;
 
 
-        ctx.font = "38px Arial";
+        /*
+            Aura
+        */
 
-        ctx.textAlign = "center";
+        ctx.fillStyle =
+            this.data.healthy
+
+                ? "rgba(100,220,120,.18)"
+
+                : "rgba(255,80,60,.15)";
+
+
+        ctx.beginPath();
+
+        ctx.arc(
+            x +
+                this.width / 2,
+            y +
+                this.height / 2,
+            25,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+
+        /*
+            Emoji
+
+            Mantemos os alimentos em emoji
+            para facilitar a leitura educativa.
+        */
+
+        ctx.font =
+            "38px Arial";
+
+        ctx.textAlign =
+            "center";
+
 
         ctx.fillText(
+
             this.data.emoji,
-            x + this.width / 2,
+
+            x +
+                this.width / 2,
+
             y + 35
+
         );
 
 
-        ctx.textAlign = "left";
+        ctx.textAlign =
+            "left";
+
     }
+
 }
 
 
@@ -1211,7 +3146,9 @@ function createPlatforms() {
         phases[currentPhase].width;
 
 
-    /* Chão */
+    /*
+        CHÃO
+    */
 
     platforms.push({
 
@@ -1219,11 +3156,18 @@ function createPlatforms() {
 
         y: 640,
 
-        width: worldWidth,
+        width:
+            worldWidth,
 
-        height: 100
+        height:
+            100
+
     });
 
+
+    /*
+        Plataformas intermediárias
+    */
 
     let x = 450;
 
@@ -1234,26 +3178,46 @@ function createPlatforms() {
     ) {
 
         const width =
-            random(180, 350);
+            random(
+                180,
+                350
+            );
+
 
         const y =
-            random(430, 570);
+            random(
+                430,
+                570
+            );
+
 
         platforms.push({
 
             x,
+
             y,
+
             width,
-            height: 25
+
+            height:
+                25
+
         });
+
 
         x +=
             width +
-            random(100, 280);
+            random(
+                100,
+                280
+            );
+
     }
 
 
-    /* Plataformas elevadas */
+    /*
+        Plataformas elevadas
+    */
 
     for (
         let i = 0;
@@ -1281,9 +3245,13 @@ function createPlatforms() {
                     260
                 ),
 
-            height: 22
+            height:
+                22
+
         });
+
     }
+
 }
 
 
@@ -1309,6 +3277,7 @@ function createPhase() {
     player =
         new Player();
 
+
     foods = [];
 
     enemies = [];
@@ -1316,6 +3285,9 @@ function createPhase() {
     floatingTexts = [];
 
     cameraX = 0;
+
+    phaseEnding = false;
+
 
     createPlatforms();
 
@@ -1327,9 +3299,6 @@ function createPhase() {
     /* ========================================================
        ALIMENTOS
     ======================================================== */
-
-    let foodX = 500;
-
 
     for (
         let i = 0;
@@ -1346,29 +3315,45 @@ function createPhase() {
             ];
 
 
+        /*
+            Evita colocar alimentos
+            muito perto do início.
+        */
+
+        const platformIndex =
+            1 +
+            Math.floor(
+                Math.random() *
+                (
+                    platforms.length -
+                    1
+                )
+            );
+
+
         const platform =
             platforms[
-                1 +
-                Math.floor(
-                    Math.random() *
-                    (platforms.length - 1)
-                )
+                platformIndex
             ];
 
 
         foods.push(
+
             new Food(
+
                 platform.x +
-                platform.width / 2,
+                platform.width / 2 -
+
+                20,
 
                 platform.y - 50,
 
                 type
+
             )
+
         );
 
-
-        foodX += 180;
     }
 
 
@@ -1379,64 +3364,75 @@ function createPhase() {
     let enemyX = 900;
 
 
-    for (
-        let i = 0;
-        i < 10;
-        i++
+    /*
+        Na fase final deixamos
+        apenas o Chef.
+    */
+
+    if (
+        currentPhase !== 3
     ) {
 
-        const type =
-            phase.enemies[
-                Math.floor(
-                    Math.random() *
-                    phase.enemies.length
+        for (
+            let i = 0;
+            i < 10;
+            i++
+        ) {
+
+            const type =
+                phase.enemies[
+                    Math.floor(
+                        Math.random() *
+                        phase.enemies.length
+                    )
+                ];
+
+
+            enemies.push(
+
+                new Enemy(
+                    enemyX,
+                    type
                 )
-            ];
+
+            );
 
 
-        enemies.push(
-            new Enemy(
-                enemyX,
-                type
-            )
-        );
+            enemyX +=
+                random(
+                    400,
+                    700
+                );
 
+        }
 
-        enemyX +=
-            random(400, 700);
     }
 
 
-    /* CHEFE */
+    /* ========================================================
+       CHEF FINAL
+    ======================================================== */
 
-    if (currentPhase === 3) {
+    if (
+        currentPhase === 3
+    ) {
 
-        enemies.push(
+        const chef =
             new Enemy(
                 phase.width - 650,
                 "chef"
-            )
+            );
+
+
+        enemies.push(
+            chef
         );
 
-        enemies[
-            enemies.length - 1
-        ].width = 100;
-
-        enemies[
-            enemies.length - 1
-        ].height = 100;
-
-        enemies[
-            enemies.length - 1
-        ].hp = 12;
-
-        enemies[
-            enemies.length - 1
-        ].speed = 2;
     }
 
 
     updateHUD();
+
 }
 
 
@@ -1446,23 +3442,48 @@ function createPhase() {
 
 function updateCamera() {
 
+    if (
+        !player
+    ) {
+
+        return;
+    }
+
+
     const target =
         player.x -
-        GAME_WIDTH * 0.4;
+        GAME_WIDTH *
+        0.4;
 
 
     cameraX +=
-        (target - cameraX) *
+        (
+            target -
+            cameraX
+        ) *
         0.08;
 
 
     cameraX =
         clamp(
+
             cameraX,
+
             0,
-            phases[currentPhase].width -
+
+            Math.max(
+
+                0,
+
+                phases[
+                    currentPhase
+                ].width -
                 GAME_WIDTH
+
+            )
+
         );
+
 }
 
 
@@ -1473,41 +3494,69 @@ function updateCamera() {
 function drawBackground() {
 
     const theme =
-        phases[currentPhase].theme;
+        phases[
+            currentPhase
+        ].theme;
 
 
     let skyTop;
+
     let skyBottom;
 
 
-    if (theme === "morning") {
+    if (
+        theme === "morning"
+    ) {
 
-        skyTop = "#65c9f0";
-        skyBottom = "#d8f3ff";
+        skyTop =
+            "#65c9f0";
 
-    } else if (theme === "city") {
+        skyBottom =
+            "#d8f3ff";
 
-        skyTop = "#547eaa";
-        skyBottom = "#d4dbe5";
 
-    } else if (theme === "park") {
+    } else if (
+        theme === "city"
+    ) {
 
-        skyTop = "#79d0ef";
-        skyBottom = "#e4f7d5";
+        skyTop =
+            "#547eaa";
+
+        skyBottom =
+            "#d4dbe5";
+
+
+    } else if (
+        theme === "park"
+    ) {
+
+        skyTop =
+            "#79d0ef";
+
+        skyBottom =
+            "#e4f7d5";
+
 
     } else {
 
-        skyTop = "#111d46";
-        skyBottom = "#392d5c";
+        skyTop =
+            "#111d46";
+
+        skyBottom =
+            "#392d5c";
+
     }
 
 
     const gradient =
         ctx.createLinearGradient(
+
             0,
             0,
+
             0,
             GAME_HEIGHT
+
         );
 
 
@@ -1515,6 +3564,7 @@ function drawBackground() {
         0,
         skyTop
     );
+
 
     gradient.addColorStop(
         1,
@@ -1525,15 +3575,21 @@ function drawBackground() {
     ctx.fillStyle =
         gradient;
 
+
     ctx.fillRect(
+
         0,
         0,
+
         GAME_WIDTH,
         GAME_HEIGHT
+
     );
 
 
-    /* Sol */
+    /*
+        Sol
+    */
 
     if (
         theme !== "night"
@@ -1542,31 +3598,105 @@ function drawBackground() {
         ctx.fillStyle =
             "#ffe680";
 
+
         ctx.beginPath();
 
+
         ctx.arc(
+
             1050,
             120,
+
             65,
+
             0,
             Math.PI * 2
+
         );
 
+
         ctx.fill();
+
     }
 
 
-    /* Montanhas */
+    /*
+        Lua
+    */
+
+    if (
+        theme === "night"
+    ) {
+
+        ctx.fillStyle =
+            "#fff2bd";
+
+
+        ctx.beginPath();
+
+
+        ctx.arc(
+
+            1050,
+            120,
+
+            50,
+
+            0,
+            Math.PI * 2
+
+        );
+
+
+        ctx.fill();
+
+
+        ctx.fillStyle =
+            "#111d46";
+
+
+        ctx.beginPath();
+
+
+        ctx.arc(
+
+            1070,
+            105,
+
+            50,
+
+            0,
+            Math.PI * 2
+
+        );
+
+
+        ctx.fill();
+
+    }
+
+
+    /*
+        Montanhas
+    */
 
     ctx.fillStyle =
+
         theme === "night"
+
             ? "#242847"
+
             : "#6eaa89";
 
 
     ctx.beginPath();
 
-    ctx.moveTo(0, 600);
+
+    ctx.moveTo(
+        0,
+        600
+    );
+
 
     for (
         let x = 0;
@@ -1575,37 +3705,56 @@ function drawBackground() {
     ) {
 
         const height =
+
             100 +
+
             Math.sin(
-                (x + cameraX * 0.2) *
+
+                (
+                    x +
+                    cameraX *
+                    0.2
+                ) *
                 0.01
+
             ) *
             60;
 
+
         ctx.lineTo(
+
             x,
-            600 - height
+
+            600 -
+            height
+
         );
+
     }
+
 
     ctx.lineTo(
         GAME_WIDTH,
         GAME_HEIGHT
     );
 
+
     ctx.lineTo(
         0,
         GAME_HEIGHT
     );
 
+
     ctx.closePath();
 
+
     ctx.fill();
+
 }
 
 
 /* ============================================================
-   DESENHAR PLATAFORMAS
+   PLATAFORMAS
 ============================================================ */
 
 function drawPlatforms() {
@@ -1615,66 +3764,102 @@ function drawPlatforms() {
     ) {
 
         const x =
-            platform.x - cameraX;
+            platform.x -
+            cameraX;
 
 
         if (
+
             x +
-            platform.width <
+                platform.width <
                 0 ||
+
             x >
                 GAME_WIDTH
+
         ) {
+
             continue;
         }
 
 
-        /* Grama */
+        /*
+            Grama
+        */
 
         ctx.fillStyle =
             "#4f9b55";
 
+
         ctx.fillRect(
+
             x,
+
             platform.y,
+
             platform.width,
+
             8
+
         );
 
 
-        /* Terra */
+        /*
+            Terra
+        */
 
         ctx.fillStyle =
             "#805633";
 
+
         ctx.fillRect(
+
             x,
+
             platform.y + 8,
+
             platform.width,
+
             platform.height - 8
+
         );
 
 
-        /* Detalhes */
+        /*
+            Detalhes
+        */
 
         ctx.fillStyle =
             "#63432b";
 
+
         for (
+
             let i = 0;
+
             i <
             platform.width;
+
             i += 30
+
         ) {
 
             ctx.fillRect(
+
                 x + i,
+
                 platform.y + 13,
+
                 8,
+
                 5
+
             );
+
         }
+
     }
+
 }
 
 
@@ -1697,27 +3882,34 @@ function showFloatingText(
         text,
 
         life: 60
+
     });
+
 }
 
 
 function updateFloatingTexts() {
 
     for (
-        const text of floatingTexts
+        const text
+        of floatingTexts
     ) {
 
         text.y -= 1;
 
         text.life--;
+
     }
 
 
     floatingTexts =
         floatingTexts.filter(
+
             text =>
                 text.life > 0
+
         );
+
 }
 
 
@@ -1726,32 +3918,45 @@ function drawFloatingTexts() {
     ctx.font =
         "bold 20px Arial";
 
+
     ctx.textAlign =
         "center";
 
 
     for (
-        const text of floatingTexts
+        const text
+        of floatingTexts
     ) {
 
         ctx.globalAlpha =
             text.life / 60;
 
+
         ctx.fillStyle =
             "#ffffff";
 
+
         ctx.fillText(
+
             text.text,
-            text.x - cameraX,
+
+            text.x -
+            cameraX,
+
             text.y
+
         );
+
     }
 
 
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha =
+        1;
+
 
     ctx.textAlign =
         "left";
+
 }
 
 
@@ -1761,40 +3966,103 @@ function drawFloatingTexts() {
 
 function updateHUD() {
 
-    document.getElementById(
-        "lives"
-    ).textContent =
-        lives;
+    const livesElement =
+        document.getElementById(
+            "lives"
+        );
 
 
-    document.getElementById(
-        "energy-value"
-    ).textContent =
-        Math.round(energy);
+    const energyValue =
+        document.getElementById(
+            "energy-value"
+        );
 
 
-    document.getElementById(
-        "energy-bar"
-    ).style.width =
-        `${clamp(energy, 0, 100)}%`;
+    const energyBar =
+        document.getElementById(
+            "energy-bar"
+        );
 
 
-    document.getElementById(
-        "score"
-    ).textContent =
-        score;
+    const scoreElement =
+        document.getElementById(
+            "score"
+        );
 
 
-    document.getElementById(
-        "food-count"
-    ).textContent =
-        collectedFoods;
+    const foodCount =
+        document.getElementById(
+            "food-count"
+        );
 
 
-    document.getElementById(
-        "phase-name"
-    ).textContent =
-        phases[currentPhase].name;
+    const phaseName =
+        document.getElementById(
+            "phase-name"
+        );
+
+
+    if (
+        livesElement
+    ) {
+
+        livesElement.textContent =
+            lives;
+    }
+
+
+    if (
+        energyValue
+    ) {
+
+        energyValue.textContent =
+            Math.round(
+                energy
+            );
+    }
+
+
+    if (
+        energyBar
+    ) {
+
+        energyBar.style.width =
+            `${clamp(
+                energy,
+                0,
+                100
+            )}%`;
+    }
+
+
+    if (
+        scoreElement
+    ) {
+
+        scoreElement.textContent =
+            score;
+    }
+
+
+    if (
+        foodCount
+    ) {
+
+        foodCount.textContent =
+            collectedFoods;
+    }
+
+
+    if (
+        phaseName
+    ) {
+
+        phaseName.textContent =
+            phases[
+                currentPhase
+            ].name;
+    }
+
 }
 
 
@@ -1807,27 +4075,101 @@ function startGame() {
     gameState =
         "PLAYING";
 
-    currentPhase = 0;
 
-    score = 0;
+    currentPhase =
+        0;
 
-    energy = 100;
 
-    lives = 3;
+    score =
+        0;
 
-    collectedFoods = 0;
 
-    gameWon = false;
+    energy =
+        100;
+
+
+    lives =
+        3;
+
+
+    collectedFoods =
+        0;
+
+
+    gameWon =
+        false;
+
+
+    phaseEnding =
+        false;
+
 
     showScreen(
         "game-screen"
     );
 
+
     createPhase();
 
-    requestAnimationFrame(
-        gameLoop
-    );
+
+    startGameLoop();
+
+}
+
+
+/* ============================================================
+   INICIAR GAME LOOP
+============================================================ */
+
+function startGameLoop() {
+
+    /*
+        Se já existe um loop funcionando,
+        não criamos outro.
+    */
+
+    if (
+        gameLoopRunning
+    ) {
+
+        return;
+    }
+
+
+    gameLoopRunning =
+        true;
+
+
+    animationFrameId =
+        requestAnimationFrame(
+            gameLoop
+        );
+
+}
+
+
+/* ============================================================
+   PARAR GAME LOOP
+============================================================ */
+
+function stopGameLoop() {
+
+    gameLoopRunning =
+        false;
+
+
+    if (
+        animationFrameId !== null
+    ) {
+
+        cancelAnimationFrame(
+            animationFrameId
+        );
+
+        animationFrameId =
+            null;
+    }
+
 }
 
 
@@ -1837,14 +4179,29 @@ function startGame() {
 
 function nextPhase() {
 
-    // Avança para a próxima fase
+    /*
+        Impede clique duplo.
+    */
+
+    if (
+        gameState !==
+        "EDUCATION"
+    ) {
+
+        return;
+    }
+
+
     currentPhase++;
 
 
-    // Se não houver mais fases,
-    // vai para a tela de vitória.
+    /*
+        Todas as fases concluídas.
+    */
+
     if (
-        currentPhase >= phases.length
+        currentPhase >=
+        phases.length
     ) {
 
         victory();
@@ -1853,39 +4210,57 @@ function nextPhase() {
     }
 
 
-    // Recupera um pouco de energia
-    // entre as fases.
-    energy = clamp(
-        energy + 20,
-        0,
-        100
-    );
+    /*
+        Recupera energia.
+    */
+
+    energy =
+        clamp(
+            energy + 20,
+            0,
+            100
+        );
 
 
-    // Reseta a quantidade de alimentos
-    // coletados na nova fase.
-    collectedFoods = 0;
+    /*
+        Reseta alimentos
+        da nova fase.
+    */
+
+    collectedFoods =
+        0;
 
 
-    // Cria todos os elementos
-    // da nova fase.
+    /*
+        Prepara a nova fase.
+    */
+
     createPhase();
 
 
-    // Define novamente o estado
-    // como jogo ativo.
-    gameState = "PLAYING";
+    gameState =
+        "PLAYING";
 
 
-    // Mostra a tela do jogo.
-    showScreen("game-screen");
+    phaseEnding =
+        false;
 
 
-    // IMPORTANTE:
-    // O gameLoop havia sido encerrado
-    // quando entramos na tela educativa.
-    // Aqui nós iniciamos novamente.
-    requestAnimationFrame(gameLoop);
+    showScreen(
+        "game-screen"
+    );
+
+
+    /*
+        Garante que o loop
+        esteja funcionando.
+    */
+
+    startGameLoop();
+
+
+    updateHUD();
+
 }
 
 
@@ -1895,48 +4270,124 @@ function nextPhase() {
 
 function showEducation() {
 
+    /*
+        Segurança contra chamadas repetidas.
+    */
+
+    if (
+        gameState !==
+        "PLAYING" ||
+        phaseEnding
+    ) {
+
+        return;
+    }
+
+
+    phaseEnding =
+        true;
+
+
     gameState =
         "EDUCATION";
 
 
     const phase =
-        phases[currentPhase];
+        phases[
+            currentPhase
+        ];
 
 
-    document.getElementById(
-        "education-icon"
-    ).textContent =
-        phase.educationIcon;
+    const icon =
+        document.getElementById(
+            "education-icon"
+        );
 
 
-    document.getElementById(
-        "education-title"
-    ).textContent =
-        phase.educationTitle;
+    const title =
+        document.getElementById(
+            "education-title"
+        );
 
 
-    document.getElementById(
-        "education-text"
-    ).textContent =
-        phase.educationText;
+    const text =
+        document.getElementById(
+            "education-text"
+        );
 
 
-    document.getElementById(
-        "education-score"
-    ).textContent =
-        score;
+    const educationScore =
+        document.getElementById(
+            "education-score"
+        );
 
 
-    document.getElementById(
-        "education-energy"
-    ).textContent =
-        Math.round(energy);
+    const educationEnergy =
+        document.getElementById(
+            "education-energy"
+        );
 
 
-    document.getElementById(
-        "education-foods"
-    ).textContent =
-        collectedFoods;
+    const educationFoods =
+        document.getElementById(
+            "education-foods"
+        );
+
+
+    if (
+        icon
+    ) {
+
+        icon.textContent =
+            phase.educationIcon;
+    }
+
+
+    if (
+        title
+    ) {
+
+        title.textContent =
+            phase.educationTitle;
+    }
+
+
+    if (
+        text
+    ) {
+
+        text.textContent =
+            phase.educationText;
+    }
+
+
+    if (
+        educationScore
+    ) {
+
+        educationScore.textContent =
+            score;
+    }
+
+
+    if (
+        educationEnergy
+    ) {
+
+        educationEnergy.textContent =
+            Math.round(
+                energy
+            );
+    }
+
+
+    if (
+        educationFoods
+    ) {
+
+        educationFoods.textContent =
+            collectedFoods;
+    }
 
 
     const button =
@@ -1946,23 +4397,30 @@ function showEducation() {
 
 
     if (
-        currentPhase ===
-        phases.length - 1
+        button
     ) {
 
-        button.textContent =
-            "🏆 FINALIZAR JOGO";
+        if (
+            currentPhase ===
+            phases.length - 1
+        ) {
 
-    } else {
+            button.textContent =
+                "🏆 FINALIZAR JOGO";
 
-        button.textContent =
-            "PRÓXIMA FASE →";
+        } else {
+
+            button.textContent =
+                "PRÓXIMA FASE →";
+        }
+
     }
 
 
     showScreen(
         "education-screen"
     );
+
 }
 
 
@@ -1976,6 +4434,7 @@ function gameOver() {
         gameState ===
         "GAMEOVER"
     ) {
+
         return;
     }
 
@@ -1984,15 +4443,28 @@ function gameOver() {
         "GAMEOVER";
 
 
-    document.getElementById(
-        "gameover-score"
-    ).textContent =
-        score;
+    stopGameLoop();
+
+
+    const scoreElement =
+        document.getElementById(
+            "gameover-score"
+        );
+
+
+    if (
+        scoreElement
+    ) {
+
+        scoreElement.textContent =
+            score;
+    }
 
 
     showScreen(
         "gameover-screen"
     );
+
 }
 
 
@@ -2002,7 +4474,21 @@ function gameOver() {
 
 function loseLife() {
 
+    if (
+        gameState !==
+        "PLAYING"
+    ) {
+
+        return;
+    }
+
+
     lives--;
+
+
+    /*
+        Reposiciona personagem.
+    */
 
     player.x =
         Math.max(
@@ -2010,11 +4496,18 @@ function loseLife() {
             player.x - 250
         );
 
-    player.y = 400;
 
-    player.velocityY = 0;
+    player.y =
+        400;
 
-    energy -= 10;
+
+    player.velocityY =
+        0;
+
+
+    energy -=
+        10;
+
 
     updateHUD();
 
@@ -2025,7 +4518,9 @@ function loseLife() {
     ) {
 
         gameOver();
+
     }
+
 }
 
 
@@ -2038,18 +4533,33 @@ function victory() {
     gameState =
         "VICTORY";
 
-    gameWon = true;
+
+    gameWon =
+        true;
 
 
-    document.getElementById(
-        "victory-score"
-    ).textContent =
-        score;
+    stopGameLoop();
+
+
+    const victoryScore =
+        document.getElementById(
+            "victory-score"
+        );
+
+
+    if (
+        victoryScore
+    ) {
+
+        victoryScore.textContent =
+            score;
+    }
 
 
     showScreen(
         "victory-screen"
     );
+
 }
 
 
@@ -2065,21 +4575,33 @@ function showScreen(
         .querySelectorAll(
             ".screen"
         )
-        .forEach(screen => {
+        .forEach(
+            screen => {
 
-            screen.classList.remove(
-                "active"
-            );
-        });
+                screen.classList.remove(
+                    "active"
+                );
+
+            }
+        );
 
 
-    document
-        .getElementById(
+    const target =
+        document.getElementById(
             screenId
-        )
-        .classList.add(
+        );
+
+
+    if (
+        target
+    ) {
+
+        target.classList.add(
             "active"
         );
+
+    }
+
 }
 
 
@@ -2106,7 +4628,10 @@ function showEnemyInfo(
         );
 
 
-    if (existing) {
+    if (
+        existing
+    ) {
+
         existing.remove();
     }
 
@@ -2122,20 +4647,32 @@ function showEnemyInfo(
 
 
     box.innerHTML = `
-        <strong>💡 ${title}</strong>
-        <p>${text}</p>
+
+        <strong>
+            💡 ${title}
+        </strong>
+
+        <p>
+            ${text}
+        </p>
+
     `;
 
 
     Object.assign(
+
         box.style,
+
         {
 
-            position: "fixed",
+            position:
+                "fixed",
 
-            left: "50%",
+            left:
+                "50%",
 
-            bottom: "110px",
+            bottom:
+                "110px",
 
             transform:
                 "translateX(-50%)",
@@ -2159,14 +4696,19 @@ function showEnemyInfo(
                 "#ffffff",
 
             zIndex:
-                "100",
+                "1000",
 
             textAlign:
                 "center",
 
             boxShadow:
-                "0 10px 40px rgba(0,0,0,.4)"
+                "0 10px 40px rgba(0,0,0,.4)",
+
+            fontFamily:
+                "Arial, sans-serif"
+
         }
+
     );
 
 
@@ -2176,11 +4718,23 @@ function showEnemyInfo(
 
 
     infoTimeout =
-        setTimeout(() => {
+        setTimeout(
 
-            box.remove();
+            () => {
 
-        }, 4500);
+                if (
+                    box.parentNode
+                ) {
+
+                    box.remove();
+                }
+
+            },
+
+            4500
+
+        );
+
 }
 
 
@@ -2190,14 +4744,38 @@ function showEnemyInfo(
 
 function checkPhaseEnd() {
 
-    const worldWidth =
-        phases[currentPhase].width;
+    if (
+        !player ||
+        gameState !==
+        "PLAYING" ||
+        phaseEnding
+    ) {
 
+        return;
+    }
+
+
+    const worldWidth =
+        phases[
+            currentPhase
+        ].width;
+
+
+    /*
+        Jogador chegou ao final.
+    */
 
     if (
         player.x >
         worldWidth - 250
     ) {
+
+        /*
+            FASE 4:
+
+            O jogador só pode terminar
+            depois de derrotar o Chef.
+        */
 
         if (
             currentPhase === 3
@@ -2205,11 +4783,17 @@ function checkPhaseEnd() {
 
             const chef =
                 enemies.find(
+
                     enemy =>
                         enemy.type ===
                         "chef"
+
                 );
 
+
+            /*
+                Chef ainda vivo.
+            */
 
             if (
                 chef &&
@@ -2218,11 +4802,18 @@ function checkPhaseEnd() {
 
                 return;
             }
+
         }
 
 
+        /*
+            Fase concluída.
+        */
+
         showEducation();
+
     }
+
 }
 
 
@@ -2232,33 +4823,62 @@ function checkPhaseEnd() {
 
 function updateGame() {
 
+    if (
+        !player
+    ) {
+
+        return;
+    }
+
+
     player.update();
 
 
+    /*
+        Alimentos
+    */
+
     foods.forEach(
+
         food =>
             food.update()
+
     );
 
+
+    /*
+        Inimigos
+    */
 
     enemies.forEach(
+
         enemy =>
             enemy.update()
+
     );
 
+
+    /*
+        Remove inimigos derrotados
+    */
 
     enemies =
         enemies.filter(
+
             enemy =>
                 !enemy.dead
+
         );
 
 
     updateFloatingTexts();
 
+
     updateCamera();
 
+
     checkPhaseEnd();
+
 }
 
 
@@ -2270,24 +4890,48 @@ function drawGame() {
 
     drawBackground();
 
+
     drawPlatforms();
 
 
+    /*
+        Alimentos
+    */
+
     foods.forEach(
+
         food =>
             food.draw()
+
     );
 
+
+    /*
+        Inimigos
+    */
 
     enemies.forEach(
+
         enemy =>
             enemy.draw()
+
     );
 
 
-    player.draw();
+    /*
+        Jogador
+    */
+
+    if (
+        player
+    ) {
+
+        player.draw();
+    }
+
 
     drawFloatingTexts();
+
 }
 
 
@@ -2297,242 +4941,917 @@ function drawGame() {
 
 function gameLoop() {
 
+    /*
+        Se saiu do estado PLAYING,
+        encerra este ciclo.
+    */
+
     if (
         gameState !==
         "PLAYING"
     ) {
+
+        gameLoopRunning =
+            false;
+
+        animationFrameId =
+            null;
+
         return;
     }
 
 
     ctx.clearRect(
+
         0,
         0,
+
         GAME_WIDTH,
         GAME_HEIGHT
+
     );
 
 
     updateGame();
 
+
     drawGame();
 
 
-    requestAnimationFrame(
-        gameLoop
-    );
+    /*
+        Continua o jogo.
+    */
+
+    animationFrameId =
+        requestAnimationFrame(
+            gameLoop
+        );
+
 }
 
 
 /* ============================================================
-   BOTÕES
+   BOTÕES DO HTML
 ============================================================ */
 
-document
-    .getElementById(
+const startButton =
+    document.getElementById(
         "start-button"
-    )
-    .addEventListener(
+    );
+
+
+if (
+    startButton
+) {
+
+    startButton.addEventListener(
         "click",
         startGame
     );
 
+}
 
-document
-    .getElementById(
+
+const instructionsButton =
+    document.getElementById(
         "instructions-button"
-    )
-    .addEventListener(
+    );
+
+
+if (
+    instructionsButton
+) {
+
+    instructionsButton.addEventListener(
+
         "click",
+
         () => {
 
             showScreen(
                 "instructions-screen"
             );
+
         }
+
+    );
+
+}
+
+
+const backMenuButton =
+    document.getElementById(
+        "back-menu-button"
     );
 
 
-document
-    .getElementById(
-        "back-menu-button"
-    )
-    .addEventListener(
+if (
+    backMenuButton
+) {
+
+    backMenuButton.addEventListener(
+
         "click",
+
         () => {
 
             gameState =
                 "MENU";
 
+            stopGameLoop();
+
             showScreen(
                 "menu-screen"
             );
+
         }
+
+    );
+
+}
+
+
+const restartButton =
+    document.getElementById(
+        "restart-button"
     );
 
 
-document
-    .getElementById(
-        "restart-button"
-    )
-    .addEventListener(
+if (
+    restartButton
+) {
+
+    restartButton.addEventListener(
         "click",
         startGame
     );
 
+}
 
-document
-    .getElementById(
+
+const gameoverMenuButton =
+    document.getElementById(
         "gameover-menu-button"
-    )
-    .addEventListener(
+    );
+
+
+if (
+    gameoverMenuButton
+) {
+
+    gameoverMenuButton.addEventListener(
+
         "click",
+
         () => {
 
             gameState =
                 "MENU";
 
+            stopGameLoop();
+
             showScreen(
                 "menu-screen"
             );
+
         }
+
+    );
+
+}
+
+
+const nextPhaseButton =
+    document.getElementById(
+        "next-phase-button"
     );
 
 
-document
-    .getElementById(
-        "next-phase-button"
-    )
-    .addEventListener(
+if (
+    nextPhaseButton
+) {
+
+    nextPhaseButton.addEventListener(
         "click",
         nextPhase
     );
 
+}
 
-document
-    .getElementById(
+
+const victoryRestartButton =
+    document.getElementById(
         "victory-restart-button"
-    )
-    .addEventListener(
+    );
+
+
+if (
+    victoryRestartButton
+) {
+
+    victoryRestartButton.addEventListener(
         "click",
         startGame
     );
 
+}
 
-document
-    .getElementById(
+
+const victoryMenuButton =
+    document.getElementById(
         "victory-menu-button"
-    )
-    .addEventListener(
+    );
+
+
+if (
+    victoryMenuButton
+) {
+
+    victoryMenuButton.addEventListener(
+
         "click",
+
         () => {
 
             gameState =
                 "MENU";
 
+            stopGameLoop();
+
             showScreen(
                 "menu-screen"
             );
+
         }
+
     );
+
+}
 
 
 /* ============================================================
    CONTROLES MOBILE
 ============================================================ */
 
-function setupMobileButton(
-    id,
-    key
+/*
+    Agora não precisamos obrigatoriamente
+    colocar os botões no HTML.
+
+    O JavaScript cria tudo automaticamente.
+*/
+
+
+let mobileControls =
+    document.getElementById(
+        "mobile-controls"
+    );
+
+
+if (
+    !mobileControls
 ) {
 
-    const button =
-        document.getElementById(
-            id
+    mobileControls =
+        document.createElement(
+            "div"
         );
 
+    mobileControls.id =
+        "mobile-controls";
 
-    button.addEventListener(
-        "pointerdown",
-        event => {
-
-            event.preventDefault();
-
-            keys[key] = true;
-        }
+    document.body.appendChild(
+        mobileControls
     );
 
-
-    button.addEventListener(
-        "pointerup",
-        event => {
-
-            event.preventDefault();
-
-            keys[key] = false;
-        }
-    );
-
-
-    button.addEventListener(
-        "pointerleave",
-        () => {
-
-            keys[key] = false;
-        }
-    );
 }
 
 
-setupMobileButton(
-    "left-btn",
-    "ArrowLeft"
+/* ============================================================
+   ESTILO DOS CONTROLES MOBILE
+============================================================ */
+
+const mobileStyle =
+    document.createElement(
+        "style"
+    );
+
+
+mobileStyle.textContent = `
+
+#mobile-controls {
+
+    position: fixed;
+
+    left: 0;
+
+    right: 0;
+
+    bottom: 18px;
+
+    width: 100%;
+
+    display: none;
+
+    justify-content: space-between;
+
+    align-items: flex-end;
+
+    padding:
+        0 20px;
+
+    box-sizing:
+        border-box;
+
+    z-index: 9999;
+
+    pointer-events:
+        none;
+
+    user-select:
+        none;
+
+    -webkit-user-select:
+        none;
+
+    touch-action:
+        none;
+}
+
+
+.mobile-control-group {
+
+    display:
+        flex;
+
+    gap:
+        12px;
+
+    pointer-events:
+        auto;
+}
+
+
+.mobile-button {
+
+    width:
+        66px;
+
+    height:
+        66px;
+
+    border-radius:
+        50%;
+
+    border:
+        3px solid
+        rgba(255,255,255,.85);
+
+    background:
+        rgba(20,35,30,.82);
+
+    color:
+        white;
+
+    font-size:
+        28px;
+
+    font-weight:
+        bold;
+
+    display:
+        flex;
+
+    align-items:
+        center;
+
+    justify-content:
+        center;
+
+    box-shadow:
+        0 5px 15px
+        rgba(0,0,0,.35);
+
+    touch-action:
+        none;
+
+    user-select:
+        none;
+
+    -webkit-user-select:
+        none;
+
+    -webkit-tap-highlight-color:
+        transparent;
+
+    transition:
+        transform .08s,
+        background .08s;
+}
+
+
+.mobile-button:active {
+
+    transform:
+        scale(.88);
+
+    background:
+        rgba(75,150,100,.95);
+}
+
+
+.mobile-jump {
+
+    width:
+        74px;
+
+    height:
+        74px;
+
+}
+
+
+.mobile-attack {
+
+    width:
+        78px;
+
+    height:
+        78px;
+
+    font-size:
+        30px;
+
+    background:
+        rgba(150,45,45,.9);
+
+}
+
+
+@media
+(max-width: 900px) {
+
+    #mobile-controls {
+
+        display:
+            flex;
+
+    }
+
+}
+
+
+@media
+(orientation: landscape)
+and
+(max-height: 600px) {
+
+    #mobile-controls {
+
+        bottom:
+            8px;
+
+    }
+
+
+    .mobile-button {
+
+        width:
+            55px;
+
+        height:
+            55px;
+
+        font-size:
+            23px;
+
+    }
+
+
+    .mobile-jump {
+
+        width:
+            62px;
+
+        height:
+            62px;
+
+    }
+
+
+    .mobile-attack {
+
+        width:
+            65px;
+
+        height:
+            65px;
+
+    }
+
+}
+
+`;
+
+
+document.head.appendChild(
+    mobileStyle
 );
 
 
-setupMobileButton(
-    "right-btn",
-    "ArrowRight"
-);
+/* ============================================================
+   CRIAR BOTÃO MOBILE
+============================================================ */
+
+function createMobileButton(
+    className,
+    icon,
+    key,
+    action = null
+) {
+
+    const button =
+        document.createElement(
+            "button"
+        );
 
 
-setupMobileButton(
-    "jump-btn",
-    "Space"
-);
+    button.type =
+        "button";
 
 
-document
-    .getElementById(
-        "attack-btn"
-    )
-    .addEventListener(
-        "pointerdown",
+    button.className =
+        `mobile-button ${className}`;
+
+
+    button.textContent =
+        icon;
+
+
+    button.setAttribute(
+        "aria-label",
+        icon
+    );
+
+
+    /*
+        Evita comportamento
+        padrão do navegador.
+    */
+
+    const prevent =
         event => {
 
             event.preventDefault();
 
-            if (
-                gameState ===
-                "PLAYING"
-            ) {
+            event.stopPropagation();
 
-                player.attack();
+        };
+
+
+    /*
+        Botão de movimento.
+    */
+
+    if (
+        key
+    ) {
+
+        button.addEventListener(
+
+            "pointerdown",
+
+            event => {
+
+                prevent(event);
+
+                keys[key] =
+                    true;
+
             }
-        }
-    );
+
+        );
+
+
+        button.addEventListener(
+
+            "pointerup",
+
+            event => {
+
+                prevent(event);
+
+                keys[key] =
+                    false;
+
+            }
+
+        );
+
+
+        button.addEventListener(
+
+            "pointercancel",
+
+            event => {
+
+                prevent(event);
+
+                keys[key] =
+                    false;
+
+            }
+
+        );
+
+
+        button.addEventListener(
+
+            "pointerleave",
+
+            () => {
+
+                keys[key] =
+                    false;
+
+            }
+
+        );
+
+    }
+
+
+    /*
+        Botão de ação.
+    */
+
+    if (
+        action
+    ) {
+
+        button.addEventListener(
+
+            "pointerdown",
+
+            event => {
+
+                prevent(event);
+
+                action();
+
+            }
+
+        );
+
+    }
+
+
+    return button;
+
+}
 
 
 /* ============================================================
-   PREVENIR ZOOM POR TOUCH
+   LAYOUT DOS CONTROLES
+============================================================ */
+
+const mobileLeft =
+    document.createElement(
+        "div"
+    );
+
+
+mobileLeft.className =
+    "mobile-control-group";
+
+
+const mobileRight =
+    document.createElement(
+        "div"
+    );
+
+
+mobileRight.className =
+    "mobile-control-group";
+
+
+/*
+    Esquerda
+*/
+
+const leftButton =
+    createMobileButton(
+
+        "mobile-left",
+
+        "◀",
+
+        "ArrowLeft"
+
+    );
+
+
+/*
+    Direita
+*/
+
+const rightButton =
+    createMobileButton(
+
+        "mobile-right",
+
+        "▶",
+
+        "ArrowRight"
+
+    );
+
+
+/*
+    Agachar
+*/
+
+const crouchButton =
+    createMobileButton(
+
+        "mobile-crouch",
+
+        "▼",
+
+        "ArrowDown"
+
+    );
+
+
+/*
+    Pulo
+*/
+
+const jumpButton =
+    createMobileButton(
+
+        "mobile-jump",
+
+        "▲",
+
+        "Space"
+
+    );
+
+
+/*
+    Ataque
+*/
+
+const attackButton =
+    createMobileButton(
+
+        "mobile-attack",
+
+        "👊",
+
+        null,
+
+        () => {
+
+            if (
+                gameState ===
+                "PLAYING" &&
+                player
+            ) {
+
+                player.attack();
+
+            }
+
+        }
+
+    );
+
+
+/*
+    Monta controles
+*/
+
+mobileLeft.appendChild(
+    leftButton
+);
+
+
+mobileLeft.appendChild(
+    rightButton
+);
+
+
+mobileLeft.appendChild(
+    crouchButton
+);
+
+
+mobileRight.appendChild(
+    jumpButton
+);
+
+
+mobileRight.appendChild(
+    attackButton
+);
+
+
+mobileControls.appendChild(
+    mobileLeft
+);
+
+
+mobileControls.appendChild(
+    mobileRight
+);
+
+
+/* ============================================================
+   PREVENIR ZOOM / SCROLL NO CELULAR
 ============================================================ */
 
 document.addEventListener(
+
     "gesturestart",
+
     event => {
 
         event.preventDefault();
+
     }
+
+);
+
+
+document.addEventListener(
+
+    "touchmove",
+
+    event => {
+
+        if (
+            gameState ===
+            "PLAYING"
+        ) {
+
+            event.preventDefault();
+
+        }
+
+    },
+
+    {
+        passive:
+            false
+    }
+
+);
+
+
+/*
+    Evita menu de contexto
+    durante o jogo.
+*/
+
+canvas.addEventListener(
+
+    "contextmenu",
+
+    event => {
+
+        event.preventDefault();
+
+    }
+
+);
+
+
+/* ============================================================
+   SOLTAR TECLAS AO SAIR DA JANELA
+============================================================ */
+
+window.addEventListener(
+
+    "blur",
+
+    () => {
+
+        Object.keys(
+            keys
+        ).forEach(
+
+            key => {
+
+                keys[key] =
+                    false;
+
+            }
+
+        );
+
+    }
+
 );
 
 
@@ -2544,3 +5863,28 @@ showScreen(
     "menu-screen"
 );
 
+updateHUD();
+
+
+/* ============================================================
+   LOG DE INICIALIZAÇÃO
+============================================================ */
+
+console.log(
+    "🥦 NUTRI - Aventura Nutritiva carregado!"
+);
+
+console.log(
+    "👩 Sprite do personagem:",
+    "assets/nutri_player_sprites_32x64.png"
+);
+
+console.log(
+    "📱 Controles Touch ativados."
+);
+
+console.log(
+    "🎮 Sistema de fases:",
+    phases.length,
+    "fases."
+);
